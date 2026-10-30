@@ -1,0 +1,140 @@
+# ==============================================================================
+# Ember Malware Detection - Initial Baseline Experiment Configuration
+# Project: Native Multimodal PE Malware Classification
+# ==============================================================================
+
+experiment:
+  name: "ember_native_multimodal_initial_baseline"
+  version: "1.1.0"
+  description: "Controlled initial baseline reproducing LightGBM and establishing single-modality vs simple multimodal baselines"
+  author: "Arjun Singh Rajput (GLA University / IIIT Kottayam)"
+  random_seed: 42
+
+paths:
+  ember_dataset_dir: "c:/Users/imsto/Desktop/Final Year Paper/ember_dataset_2018_2/ember2018"
+  colab_dataset_dir: "/content/drive/MyDrive/Final Year Paper/ember_dataset_2018_2/ember2018"
+  output_dir: "./data/prepared_splits"
+  checkpoint_dir: "./checkpoints"
+  metrics_dir: "./reports/metrics"
+  pretrained_lgbm_model: "ember_model_2018.txt"
+
+dataset:
+  train_files:
+    - "train_features_0.jsonl"
+    - "train_features_1.jsonl"
+    - "train_features_2.jsonl"
+    - "train_features_3.jsonl"
+    - "train_features_4.jsonl"
+    - "train_features_5.jsonl"
+  test_file: "test_features.jsonl" # QUARANTINED: Not accessed during initial baseline development
+  
+  # Reproducible split parameters
+  sampling:
+    n_train_samples: 16000     # 8,000 benign, 8,000 malware
+    n_val_samples: 4000        # 2,000 benign, 2,000 malware
+    shard_balanced: true       # Proportional sampling across all 6 training shards
+    stratified: true
+    exclude_unlabeled: true    # Exclude label == -1 completely from supervised training
+    check_duplicates: true
+
+modalities:
+  modality_a_byte:
+    name: "byte_level_statistics"
+    features: ["histogram", "byteentropy"]
+    input_dim: 512
+    normalization: "sum_normalized_probabilities"
+
+  modality_b_text:
+    name: "textual_api_metadata"
+    sources: ["imports", "exports", "section_names"]
+    max_sequence_length: 256   # Configurable: 128 (64.4%), 256 (83.9%), 384 (91.0%), 512 (94.7%)
+    vocab_size: 10000
+    embedding_dim: 128
+
+  modality_c_struct:
+    name: "structural_pe_numerical"
+    sources: ["general", "header", "section_aggregates", "datadirectories", "strings"]
+    input_dim: 66
+    scaling: "standard_scaler" # Fitted on train split only
+
+baselines:
+  # 1. Fresh LightGBM Baseline (Fair out-of-sample tabular benchmark)
+  fresh_lightgbm:
+    feature_count: 2381
+    n_estimators: 1000
+    learning_rate: 0.05
+    num_leaves: 31
+    random_state: 42
+    train_samples: 16000
+    val_samples: 4000
+    objective: "binary"
+    eval_metric: "auc"
+
+  # 2. Pretrained LightGBM Reference (In-Sample upper-bound reference ONLY)
+  pretrained_reference_only:
+    model_file: "ember_model_2018.txt"
+    feature_count: 2381
+    internal_count: 600000
+    warning: "Trained on entire 600k labeled EMBER training set. Contains validation samples (in-sample evaluation). Do not report as fair out-of-sample benchmark."
+    objective: "binary"
+    eval_metric: "auc"
+
+  # 2. Experiment A: Byte-statistics-only MLP
+  byte_mlp:
+    input_dim: 512
+    hidden_dims: [256, 128]
+    dropout: 0.2
+    batch_norm: true
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    batch_size: 64
+    epochs: 10
+
+  # 3. Experiment B: Textual-metadata-only CNN (Learned Embedding + 1D Conv)
+  text_cnn:
+    vocab_size: 10000
+    embedding_dim: 128
+    conv_channels: 128
+    kernel_size: 3
+    pooling: "adaptive_avg_pool"
+    classifier_hidden: 64
+    dropout: 0.2
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    batch_size: 64
+    epochs: 10
+
+  # 4. Experiment C: Structural-features-only MLP
+  struct_mlp:
+    input_dim: 66
+    hidden_dims: [128, 64]
+    dropout: 0.2
+    batch_norm: true
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    batch_size: 64
+    epochs: 10
+
+  # 5. Experiment A+B+C: Three-Modality Multimodal Fusion Baseline
+  multimodal_fusion:
+    byte_dim: 512
+    text_emb_dim: 128
+    struct_dim: 66
+    fusion_hidden_dim: 128
+    classifier_hidden_dims: [64]
+    dropout: 0.3
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    batch_size: 64
+    epochs: 10
+
+evaluation:
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "roc_auc"
+    - "fpr_at_99pct_tpr"
+    - "confusion_matrix"
+  save_format: "json"

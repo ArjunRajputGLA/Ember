@@ -1,0 +1,34 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Large dataset files & splits
+data/
+experiments/
+ember_dataset_2018_2/
+ember_dataset*/
+*.npz
+*.jsonl
+*.csv
+*.h5
+
+# Model checkpoints & large weights
+checkpoints/
+*.pt
+*.pth
+*.bin
+*.onnx
+ember_model_*.txt
+
+# Logs & temp outputs
+logs/
+*.log
+.ipynb_checkpoints/
+
