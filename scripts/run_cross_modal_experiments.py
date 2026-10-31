@@ -710,9 +710,28 @@ def main():
         np.savez_compressed(pred_path, **seed_predictions)
         print(f"Saved complete validation predictions to: {pred_path}")
 
+    # Seamlessly aggregate over all available seeds on disk (merges previously completed seeds)
+    all_disk_seeds = []
+    full_aggregated_results = {m: [] for m in args.models}
+    candidate_seeds = sorted(list(set(args.seeds + [42, 123, 2026])))
+    for s in candidate_seeds:
+        seed_complete = all(os.path.exists(os.path.join(metrics_dir, f"run_{m}_seed{s}.json")) for m in args.models)
+        if seed_complete:
+            all_disk_seeds.append(s)
+            for m in args.models:
+                with open(os.path.join(metrics_dir, f"run_{m}_seed{s}.json")) as f:
+                    full_aggregated_results[m].append(json.load(f))
+
+    if len(all_disk_seeds) > 0 and all(len(runs) > 0 for runs in full_aggregated_results.values()):
+        eval_seeds = all_disk_seeds
+        eval_results = full_aggregated_results
+    else:
+        eval_seeds = args.seeds
+        eval_results = all_results
+
     # Compute and Save Aggregate Metrics
     agg_path = os.path.join(metrics_dir, "cross_modal_attention_results.json")
-    aggregate_summary = compute_aggregate_results(all_results, args.seeds, agg_path)
+    aggregate_summary = compute_aggregate_results(eval_results, eval_seeds, agg_path)
 
     # Run Paired Bootstrap Statistical Significance Analysis
     print("\n" + "=" * 80)
@@ -725,8 +744,10 @@ def main():
         base_pred_dir = os.path.join("Old Repo Data", base_pred_dir)
 
     stat_results = {}
-    for seed in args.seeds:
+    for seed in eval_seeds:
         seed_preds_file = os.path.join(metrics_dir, f"predictions_seed{seed}.npz")
+        if not os.path.exists(seed_preds_file):
+            continue
         cur_preds = np.load(seed_preds_file)
         y_true_seed = cur_preds["y_true"]
         p_cmanet = cur_preds["p_cmanet_full"]
